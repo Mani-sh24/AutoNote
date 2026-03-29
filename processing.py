@@ -4,10 +4,10 @@ from math import ceil
 from heapq import nlargest
 from collections import Counter
 from math import log
-NER_THRESHOLD = 1.9
+NER_THRESHOLD = 2
 ACCEPTABLE_SENTENCE_LEN = 10
-SUMMARY_LEN = 0.2
-NOUN_CHUNK_WEIGHT = 0.45
+SUMMARY_LEN = 0.25
+NOUN_CHUNK_WEIGHT = 0.46
 GARBAGE_TYPES = {
     "DATE",      # "past", "year", "months", "quarterly" — too generic
     "TIME",      # "morning", "afternoon" — not informative
