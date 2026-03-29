@@ -19,9 +19,9 @@ GARBAGE_TYPES = {
     "LANGUAGE",  # "English"
 }
 nlp = spacy.load("en_core_web_md")
-with open("summary.txt" , "r") as f:
-    text = f.read()
-f.close()
+# with open("summary.txt" , "r") as f:
+#     text = f.read()
+# f.close()
 def cleantext(text):
     fillers = r'\b(uh|um|like|basically|kind of|sort of|you know|i mean)\b'
     text = re.sub(r"\[.*?\]", r"", text)
