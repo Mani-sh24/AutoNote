@@ -6,7 +6,7 @@
 
 ## What It Does
 
-MeetingMind takes an audio recording of any meeting — Zoom, Google Meet, Teams, or any other platform — captured via a Chrome extension, and returns a clean, concise summary of what was discussed.
+It takes an audio recording of any meeting — Zoom, Google Meet, Teams, or any other platform — captured via a Chrome extension, and returns a clean, concise summary of what was discussed.
 
 No fluff. No hallucinations. Just the key points extracted directly from what was actually said.
 
