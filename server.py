@@ -6,7 +6,6 @@ import mlx_whisper
 import os 
 
 os.makedirs("contents" , exist_ok=True)
-
 warnings.filterwarnings("ignore")
 # model  = WhisperModel("tiny"  ,  device="cpu",compute_type="int8",cpu_threads=4) // not suitable for apple silicon
 # model = WhisperModel("tiny", device="auto", compute_type="int8", cpu_threads=8) // not suitable for apple silicon
@@ -18,6 +17,8 @@ def hello():
 
 @app.post("/upload-audio")
 async def read_audio(file: UploadFile):
+    if file.content_type != "audio/mpeg":
+        return {"Error":"Error only audio files are supported"}
     if file.size and file.size > 100 * 1024 * 1024:
         return {"error": "File too large"}
     
@@ -30,9 +31,9 @@ async def read_audio(file: UploadFile):
     result = mlx_whisper.transcribe(fpath, path_or_hf_repo="mlx-community/whisper-tiny-mlx")
     res = result["text"]    
     os.remove(fpath)
-
+    
     summary = summarise_extractive(res)
-    return {"filename": file.filename, "filesize": file.size, "Summary": summary}
+    return {"filename": file.filename, "file-type" :file.content_type,  "filesize": file.size, "Summary": summary}
 
 @app.post("/test")
 async def test_f(file:UploadFile = File(...)):
@@ -48,6 +49,9 @@ async def test_f(file:UploadFile = File(...)):
     }
 
 def summarise_extractive(content):
+    print(len(content))
+    if len(content) < 150:
+        return "Content Very Short to summarise"
     cleaned_text = cleantext(content)
     tokens, sentences = process_text(cleaned_text)
     word_frequency = wordFreq(tokens, sentences)
