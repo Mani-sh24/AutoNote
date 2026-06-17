@@ -1,12 +1,15 @@
 import re
 import spacy
 from math import ceil
-from heapq import nlargest
 from collections import Counter
 from math import log
+
 NER_THRESHOLD = 2
 ACCEPTABLE_SENTENCE_LEN = 10
-SUMMARY_LEN = 0.25
+SUMMARY_LEN = 0.20
+MAX_SUMMARY_SENTENCES = 3
+REDUNDANCY_WEIGHT = 0.35
+SIMILARITY_THRESHOLD = 0.80
 NOUN_CHUNK_WEIGHT = 0.46
 GARBAGE_TYPES = {
     "DATE",      # "past", "year", "months", "quarterly" — too generic
@@ -19,9 +22,8 @@ GARBAGE_TYPES = {
     "LANGUAGE",  # "English"
 }
 nlp = spacy.load("en_core_web_md")
-# with open("summary.txt" , "r") as f:
-#     text = f.read()
-# f.close()
+
+
 def cleantext(text):
     fillers = r'\b(uh|um|like|basically|kind of|sort of|you know|i mean)\b'
     text = re.sub(r"\[.*?\]", r"", text)
@@ -31,6 +33,7 @@ def cleantext(text):
     text = re.sub(r"([!?.,])\1+", r"\1", text)
     text = re.sub(r"\s+", " ", text)
     return text.strip()
+
 
 def process_text(text):
     doc = nlp(text)
@@ -53,7 +56,7 @@ def process_text(text):
         if short_ratio > 0.40:
             continue
         sentences.append(sent)
-        for token in sent:
+        for token in sent: 
             if token.is_stop or token.is_punct:
                 continue
             if token.pos_ == "INTJ" or token.dep_ == "discourse":
@@ -61,11 +64,16 @@ def process_text(text):
             tokens.append(token.lemma_.lower())
 
     return tokens, sentences
+
+
 def wordFreq(tokens, sentences):
+    if not tokens or not sentences:
+        return {}
+
     tf = Counter(tokens)
     max_tf = max(tf.values())
 
-    N = len(sentences)
+    sentence_count = len(sentences)
     doc_freq = Counter()
     for sent in sentences:
         seen = set()
@@ -82,7 +90,7 @@ def wordFreq(tokens, sentences):
     tfidf = {}
     for word, freq in tf.items():
         tf_score = freq / max_tf
-        idf_score = log(N / (1 + doc_freq[word]))
+        idf_score = log((1 + sentence_count) / (1 + doc_freq[word])) + 1
         tfidf[word] = tf_score * idf_score
 
     return tfidf
@@ -97,7 +105,7 @@ def sent_score(sentences, word_frequency):
             continue
         score = 0
 
-        for token in sent:
+        for token in sent: 
             if token.is_stop or token.is_punct:
                 continue
             if token.pos_ == "INTJ" or token.dep_ == "discourse":
@@ -120,18 +128,65 @@ def sent_score(sentences, word_frequency):
     return sentence_scores
 
 
-# # ---- MAIN FLOW ----
-# cleaned_text = cleantext(text)
-# tokens, sentences = process_text(cleaned_text)
-# word_frequency = wordFreq(tokens, sentences)
-# sentence_scores = sent_score(sentences, word_frequency)
-# select_len = max(ceil(len(sentences) * SUMMARY_LEN), 5)
-# summary = nlargest(select_len, sentence_scores, key=sentence_scores.get)
-# res = ""
-# for sent in sorted(summary, key=lambda s: s.start):
-#     res += sent.text + " "
+def _sentence_terms(sentence):
+    return {
+        token.lemma_.lower()
+        for token in sentence
+        if not token.is_stop and not token.is_punct
+    }
 
-# with open("Trans.txt", "w+") as f:
-#     f.write(res.strip())
 
-# print("done")
+def _overlap(left, right):
+    union = left | right
+    return len(left & right) / len(union) if union else 0
+
+
+def select_summary(sentences, sentence_scores):
+    if not sentence_scores:
+        return []
+
+    select_len = min(
+        MAX_SUMMARY_SENTENCES,
+        max(1, ceil(len(sentences) * SUMMARY_LEN)),
+    )
+    candidates = list(sentence_scores)
+    selected = [max(candidates, key=sentence_scores.get)]
+    candidates.remove(selected[0])
+    max_score = sentence_scores[selected[0]]
+    terms = {sentence: _sentence_terms(sentence) for sentence in sentence_scores}
+    candidates = [
+        sentence for sentence in candidates
+        if _overlap(terms[sentence], terms[selected[0]]) < SIMILARITY_THRESHOLD
+    ]
+
+    while candidates and len(selected) < select_len:
+        def mmr_score(sentence):
+            relevance = sentence_scores[sentence] / max_score
+            redundancy = max(_overlap(terms[sentence], terms[item]) for item in selected)
+            return relevance - REDUNDANCY_WEIGHT * redundancy
+
+        chosen = max(candidates, key=mmr_score)
+        selected.append(chosen)
+        candidates.remove(chosen)
+        candidates = [
+            sentence for sentence in candidates
+            if _overlap(terms[sentence], terms[chosen]) < SIMILARITY_THRESHOLD
+        ]
+
+    return sorted(selected, key=lambda sentence: sentence.start)
+
+
+def summarise_extractive(content):
+    cleaned_text = cleantext(content)
+    if not cleaned_text:
+        return ""
+
+    tokens, sentences = process_text(cleaned_text)
+    word_frequency = wordFreq(tokens, sentences)
+    sentence_scores = sent_score(sentences, word_frequency)
+    summary = select_summary(sentences, sentence_scores)
+
+    if not summary:
+        return cleaned_text
+
+    return " ".join(sentence.text.strip() for sentence in summary)

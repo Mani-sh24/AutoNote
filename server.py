@@ -1,6 +1,6 @@
 from fastapi import FastAPI , File , UploadFile
 # from faster_whisper import WhisperModel
-from processing import *
+from processing import summarise_extractive
 import warnings
 import mlx_whisper
 import os 
@@ -11,6 +11,13 @@ warnings.filterwarnings("ignore")
 # model = WhisperModel("tiny", device="auto", compute_type="int8", cpu_threads=8) // not suitable for apple silicon
 model = mlx_whisper.load_models.load_model("mlx-community/whisper-small-mlx")
 app = FastAPI()
+
+
+def save_transcription(content):
+    with open("txrt1.txt", "w", encoding="utf-8") as transcript_file:
+        transcript_file.write(content)
+
+
 @app.get("/")
 def hello():
     return {"hello":1}
@@ -31,7 +38,7 @@ async def read_audio(file: UploadFile):
     result = mlx_whisper.transcribe(fpath, path_or_hf_repo="mlx-community/whisper-tiny-mlx")
     res = result["text"]    
     os.remove(fpath)
-    
+    save_transcription(res)
     summary = summarise_extractive(res)
     return {"filename": file.filename, "file-type" :file.content_type,  "filesize": file.size, "Summary": summary}
 
@@ -47,19 +54,6 @@ async def test_f(file:UploadFile = File(...)):
         "filename":file.filename,
         "filetype":file.content_type
     }
-
-def summarise_extractive(content):
-    print(len(content))
-    if len(content) < 150:
-        return "Content Very Short to summarise"
-    cleaned_text = cleantext(content)
-    tokens, sentences = process_text(cleaned_text)
-    word_frequency = wordFreq(tokens, sentences)
-    sentence_scores = sent_score(sentences, word_frequency)
-    select_len = max(ceil(len(sentences) * SUMMARY_LEN), 5)
-    summary = nlargest(select_len, sentence_scores, key=sentence_scores.get)
-    res = " ".join(sent.text for sent in sorted(summary, key=lambda s: s.start))
-    return res
 
 # this route uses faster-whisper i am using mlx-whisper cuz apple silicon faster results
 # @app.post("/upload-audio")
